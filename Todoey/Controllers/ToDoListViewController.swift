@@ -8,11 +8,15 @@
 
 import UIKit
 import RealmSwift
+import ChameleonFramework
 
-class ToDoListViewController: UITableViewController {
+class ToDoListViewController: SwipeTableViewController {
     
     var todoItem: Results<Item>?
     let realm = try! Realm()
+    
+    
+    @IBOutlet weak var searchBar: UISearchBar!
     var selectedCategory : Category? {
         didSet {
             loadItems()
@@ -23,10 +27,43 @@ class ToDoListViewController: UITableViewController {
         super.viewDidLoad()
         
         print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
+        tableView.separatorStyle = .none
         
     }
     
-    //MARK - TableView Datasource Method
+    override func viewDidAppear(_ animated: Bool) {
+        
+        title = selectedCategory!.name
+        
+        guard let colourHex = selectedCategory?.colour else {fatalError()}
+                
+        updateNavBar(withHexCode: colourHex)
+    }
+    
+    override func viewDidDisappear(_ animated: Bool) {
+        
+        updateNavBar(withHexCode: "1D9BF6")
+    }
+    //MARK: - Nav Bar Setuo
+    
+    func updateNavBar(withHexCode colourHexCode: String) {
+        
+        guard let navBar = navigationController?.navigationBar else {fatalError("navigation controller doesn't exist")}
+        
+        guard let navbarcolour = UIColor(hexString: colourHexCode) else {fatalError()}
+        
+        navBar.barTintColor = navbarcolour
+        
+        navBar.tintColor = ContrastColorOf(navbarcolour, returnFlat: true)
+        
+        navBar.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor: ContrastColorOf(navbarcolour, returnFlat: true)]
+        
+        searchBar.barTintColor = navbarcolour
+    }
+    
+    
+    
+    //MARK: - TableView Datasource Method
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         
@@ -36,11 +73,17 @@ class ToDoListViewController: UITableViewController {
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         
-        let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
         
         if let item = todoItem?[indexPath.row] {
             
             cell.textLabel?.text = item.title
+            
+            if let colour = UIColor(hexString: selectedCategory!.colour)?.darken(byPercentage: (CGFloat(indexPath.row) / CGFloat(todoItem!.count))) {
+                
+                cell.backgroundColor = colour
+                cell.textLabel?.textColor = ContrastColorOf(colour, returnFlat: true)
+            }
             
             cell.accessoryType = item.done ? .checkmark : .none
         }
@@ -51,7 +94,6 @@ class ToDoListViewController: UITableViewController {
         return cell
         
     }
-    
     //MARK - TableView Delegate method
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
@@ -70,7 +112,6 @@ class ToDoListViewController: UITableViewController {
         
         tableView.deselectRow(at: indexPath, animated: true)
     }
-    
     //MARK - Add New Item
    
     @IBAction func addButtonPressed(_ sender: UIBarButtonItem) {
@@ -81,7 +122,6 @@ class ToDoListViewController: UITableViewController {
         
         let action = UIAlertAction.init(title: "Add Item", style: .default) { (action) in
             
-            //what will happens when user clicks on add items button on our UIAlert
             if let currentCategory = self.selectedCategory {
                 do {
                     try self.realm.write {
@@ -92,10 +132,10 @@ class ToDoListViewController: UITableViewController {
                    }
                 }catch {
                     print("Error saving new Items \(error)")
-               }
             }
-            self.tableView.reloadData()
         }
+            self.tableView.reloadData()
+    }
         
         alert.addTextField {(alertTextField) in
             
@@ -108,22 +148,24 @@ class ToDoListViewController: UITableViewController {
         present(alert, animated: true, completion: nil)
     }
 //MARK - Model Manupulation Method
-//    func saveItems() {
-//
-//        do {
-//            try realm.add(Category.self)
-//        }
-//        catch {
-//            print("Error saving \(error )")
-//        }
-//        tableView.reloadData()
-//    }
-//
+
     func loadItems() {
         
         todoItem = selectedCategory?.items.sorted(byKeyPath: "title", ascending: true)
 
         tableView.reloadData()
+    }
+    
+    override func updateModel(at indexpath: IndexPath) {
+        if let item = todoItem?[indexpath.row] {
+            do {
+            try realm.write {
+                realm.delete(item)
+            }
+            }catch {
+                print("Error Item deletion \(error)")
+            }
+        }
     }
 }
 //MARK - SearchBar Methods
